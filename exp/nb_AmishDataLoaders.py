@@ -120,13 +120,14 @@ class AmishVolumeDataset(AmishDataset):
                 mode='train',
                 data_type = None,
                 cov = None,
-                slice_dsamp=1
+                slice_dsamp=1,
+                group_func = lambda f: f.name.split('_')[:4]
                 ):
 
         super().__init__(items, df, pathologies,csv_file, transform,index_col)
         self.items.sort()
         self.img_items = self.items
-        self.items = [list(i) for j, i in groupby(self.items,lambda f: f.name.split('_')[:4])]
+        self.items = [list(i) for j, i in groupby(self.items,group_func)]
         self.n_workers = n_workers
         self.resize = resize
         self.rcrop_size = rcrop_size

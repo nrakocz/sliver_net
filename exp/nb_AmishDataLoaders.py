@@ -203,6 +203,11 @@ class AmishVolumeDataset(AmishDataset):
         return image
 
     def __getitem__(self, idx):
+        v = self.get_img(idx)
+        pheno = self.get_pheno(idx)
+        return v,pheno
+
+    def get_img(self,idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -237,6 +242,20 @@ class AmishVolumeDataset(AmishDataset):
         else:
             v = torch.stack(slices).squeeze()
 
+
+        # add covariants
+        if(self.cov is not None):
+            v_cov = getMlutiLabel(img_name,self.cov,self.df,self.data_type)
+            v = (v,v_cov.astype(np.float32).values)
+
+        return v
+
+    def get_pheno(self,idx):
+
+        vol_list = self.items[idx]
+        vol_list.sort(key=lambda f: int(f.stem.split('_')[-1]))
+        img_name = vol_list[0]
+
         # grab target
         pheno = getMlutiLabel(img_name,self.pathologies,self.df,self.data_type)
         if(self.pathologies=='eye'):
@@ -246,12 +265,7 @@ class AmishVolumeDataset(AmishDataset):
             if(isinstance(pheno,pd.Series)): pheno = pheno.values
             elif(self.classification): pheno = np.array([0,1],dtype=np.float32) if(pheno) else np.array([1,0],dtype=np.float32)
 
-        # add covariants
-        if(self.cov is not None):
-            v_cov = getMlutiLabel(img_name,self.cov,self.df,self.data_type)
-            v = (v,v_cov.astype(np.float32).values)
-
-        return v, pheno
+        return pheno
 
     def filter_by_func(self,func):
         self.items = [vl for vl in self.items if(func(vl[0]))]

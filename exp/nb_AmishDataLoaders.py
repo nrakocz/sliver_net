@@ -121,11 +121,13 @@ class AmishVolumeDataset(AmishDataset):
                 data_type = None,
                 cov = None,
                 slice_dsamp=1,
-                group_func = lambda f: f.name.split('_')[:4]
+                group_func = lambda f: f.name.split('_')[:4],
+                sort_key=None
+
                 ):
 
         super().__init__(items, df, pathologies,csv_file, transform,index_col)
-        self.items.sort()
+        self.items.sort(key=sort_key)
         self.img_items = self.items
         self.items = [list(i) for j, i in groupby(self.items,group_func)]
         self.n_workers = n_workers

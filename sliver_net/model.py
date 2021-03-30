@@ -1,9 +1,6 @@
 import logging
 import os
 
-from fastai.train import Learner
-from fastai.callbacks import EarlyStoppingCallback, SaveModelCallback
-
 import torch
 import torchvision.models as tmodels
 import torch.nn.functional as F

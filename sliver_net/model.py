@@ -6,10 +6,25 @@ import torchvision.models as tmodels
 import torch.nn.functional as F
 
 
+"""
+Usage to load model:
+    1. Initialize a backbone
+    2. Create the model on top
+if kermany pretrained weights exist (i.e. using the Azure GPU)
+
+>> backbone = load_backbone("kermany").cuda()
+else:
+>> backbone = load_backbone("scratch").cuda() # initializes a backbone from scratch (optionally, use "imagenet")
+
+>> model = SliverNet2(backbone, n_out=[number_of_targets]).cuda()
+
+"""
+
+
 def load_backbone(model_name):
-    
+
     kermany_pretrained_weights = "/opt/data/commonfilesharePHI/jnchiang/projects/Ophth/iRORAcRORA/models/kermany_pretrained.pth"
-    
+
     if "imagenet" in str(model_name).lower():
         logging.info("Loading ImageNet Model")
         model = tmodels.resnet18(pretrained=True)
@@ -26,7 +41,7 @@ def load_backbone(model_name):
     else:
         logging.info("Loading model from scratch")
         model = tmodels.resnet18(pretrained=False)
-    
+
     # This will be 512 units... HARD CODED b/c resnet
     # after hacking off the FC and pooling layer, Resnet18 downsamples 5x
     # output size: B x C x H // 32 x W // 32
@@ -36,8 +51,8 @@ def nonadaptiveconcatpool2d(x, k):
     # concatenating average and max pool, with kernel and stride the same
     ap = F.avg_pool2d(x, kernel_size=(k, k), stride=(k, k))
     mp = F.max_pool2d(x, kernel_size=(k, k), stride=(k, k))
-    return torch.cat([mp, ap], 1) 
-   
+    return torch.cat([mp, ap], 1)
+
 class FeatureCNN2(torch.nn.Module):
     # def __init__(self,input_size,n_out=1, input_channels=1024,ncov=0,kernel_size=3,pool_size=4,add_layers=False):
     def __init__(self,n_out=1, input_channels=1024,ncov=0,kernel_size=3,pool_size=4,add_layers=False):
@@ -47,7 +62,7 @@ class FeatureCNN2(torch.nn.Module):
         CONV3_FILTERS = 64
         CONV4_FILTERS = 128
         FC1_OUT = 24
-        
+
         self.add_layers = add_layers
         self.ncov = ncov
         self.conv1 = torch.nn.Conv1d(input_channels, CONV1_FILTERS, kernel_size=kernel_size, stride=1, padding=0)
@@ -57,7 +72,7 @@ class FeatureCNN2(torch.nn.Module):
         # output size: (N-2(kernel_size-1))//pool_stride
         self._nlayers = 2
         # out_size = input_size-self._nlayers*(kernel_size-1)
-        
+
         if(add_layers):
             self.poolMid = torch.nn.MaxPool1d(kernel_size=pool_size, padding= pool_size//2 ,stride=pool_size)
             # out_size = (out_size//pool_size)+1
@@ -66,16 +81,16 @@ class FeatureCNN2(torch.nn.Module):
             # out_size = out_size - 2*(kernel_size-1)
             self._nlayers = 4
             self._conv_filters = CONV4_FILTERS
-        
+
         # output size: N-2(kernel_size-1)
         # self.pool = torch.nn.MaxPool1d(kernel_size=out_size, padding=0)
         # dynamic global pooling instead of computing the size
         self.pool = torch.nn.AdaptiveMaxPool1d(1, return_indices=True)
-        
+
         self._output_size = 1
         self.fc1 = torch.nn.Linear(self._conv_filters + ncov, FC1_OUT)
         self.fc2 = torch.nn.Linear(FC1_OUT, n_out)
-    
+
     def forward(self,x,cov=None):
         # x: B x C x N
         x = self.conv1(x)
@@ -93,7 +108,7 @@ class FeatureCNN2(torch.nn.Module):
             # x: B x C x (N - (2(kernel_size-1) // 1) // pool_size) + 1 - 2(kernel_size-1) // 1
             x = self.conv4(x)
             x = F.relu(x)
-            
+
         x, idx = self.pool(x)
         # x: B x C x 1
         x = x.view(-1, self._conv_filters)
@@ -106,8 +121,8 @@ class FeatureCNN2(torch.nn.Module):
         x = F.relu(x)
         x = self.fc2(x)
         # x: B x n_out
-        return x  
-    
+        return x
+
     def max_slice(self, x):
         # x: B x C x N
         x = self.conv1(x)
@@ -125,11 +140,11 @@ class FeatureCNN2(torch.nn.Module):
             # x: B x C x (N - (2(kernel_size-1) // 1) // pool_size) + 1 - 2(kernel_size-1) // 1
             x = self.conv4(x)
             x = F.relu(x)
-            
-        _, idx = self.pool(x)   
+
+        _, idx = self.pool(x)
         return idx
-    
-    
+
+
 class SliverNet2(torch.nn.Module):
     def __init__(self, backbone=None, n_out=2, ncov=0,add_layers=False):
         super().__init__()
@@ -137,10 +152,10 @@ class SliverNet2(torch.nn.Module):
             self.backbone=load_backbone(model_name="scratch", n_feats=n_feats)
         else:
             self.backbone = backbone
-        # get_backbone(model_name, n_feats)  # change to load_backbone        
+        # get_backbone(model_name, n_feats)  # change to load_backbone
         # self.model = torch.nn.Sequential(self.model, NonAdaptiveConcatPool2d(8))
         self.cov_model = FeatureCNN2(ncov=ncov,n_out=n_out,add_layers=add_layers)
-    
+
     def forward(self,x,cov=None):
         # B x C x (n_slices x orig_W) x orig_W
         x = self.backbone(x) # get the feature maps
@@ -148,10 +163,10 @@ class SliverNet2(torch.nn.Module):
         kernel_size = x.shape[-1]  # W
         x = nonadaptiveconcatpool2d(x, kernel_size) # pool the feature maps with kernel and stride W
         # B x C x n_slices x 1
-        x = x.squeeze(dim=-1) 
+        x = x.squeeze(dim=-1)
         # B x C x n_slices
-        return self.cov_model(x,cov)  # 1d cnn, etc  
-    
+        return self.cov_model(x,cov)  # 1d cnn, etc
+
     def feature_maps(self, x):
         # generate heatmaps on each image in the batch
         # make sure model is in eval mode
@@ -160,12 +175,12 @@ class SliverNet2(torch.nn.Module):
         # ax.imshow(img[i][1],cmap='gray',alpha=1)
         # ax.imshow(hm[i], alpha=0.3, extent=(0,w,h,0),
         #               interpolation='bilinear', cmap='magma')
-        
+
         # x: B x C x (n_slices x orig_W) x orig_W
         hm = self.backbone(x)
         # hm: B x C x (n_slices x W) x W
         return torch.mean(hm, 1)
-    
+
     def max_slices(self, x, kernel_size=3):
         # in progress.
         # eventually we will find the slice(s) that give the highest signal
@@ -177,9 +192,9 @@ class SliverNet2(torch.nn.Module):
         kernel_size = x.shape[-1]  # W
         x = nonadaptiveconcatpool2d(x, kernel_size) # pool the feature maps with kernel and stride W
         # B x C x n_slices x 1
-        x = x.squeeze(dim=-1) 
+        x = x.squeeze(dim=-1)
         idx = self.cov_model.max_slice(x)
         idx = idx.view(-1, self.cov_model._conv_filters)
 
         return idx
-        
+

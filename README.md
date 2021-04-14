@@ -18,5 +18,6 @@ model = SliverNet2(backbone, n_out=2) # create SLIVER-Net with n_out outputs
 A minimal data loader example is provided in `sliver_net/data.py`. Our approach handles 3D volumes by rearranging them into a 2D "Tile" of slices and processing the entire tile as a single 2D image. Then, a 1D convolution is run over the resulting feature representation to account for the third dimension. Thus the data loader for the pytorch model should accept a 3D volumetric input (in our case, 97 x 256 x 256) and return a tiled image of shape (3 x H x W) - in our case (3 x [97x256] x 256) where 97 is the number of slices in the 3D volume. We performed contrast stretching on each slice as the only preprocessing step.
 
 Please cite the following article if this model was useful to your work.
+
 `Rakocz, N., Chiang, J.N., Nittala, M.G. et al. Automated identification of clinical features from sparsely annotated 3-dimensional medical imaging. npj Digit. Med. 4, 44 (2021). https://doi.org/10.1038/s41746-021-00411-w`
 

@@ -147,14 +147,20 @@ class FeatureCNN2(torch.nn.Module):
 
 class SliverNet2(torch.nn.Module):
     def __init__(self, backbone=None, n_out=2, ncov=0,add_layers=False):
+        # backbone: default resnet18
+        # n_out: number of features being predicted
+        # ncov: number of covariates (e.g. age, sex)
+        # add_layers: add additional convolutions in slice aggregation (not guaranteed to work)
+        # note. the loss function is simply BCEWithLogitsLoss() in pytorch
         super().__init__()
         if backbone is None:
-            self.backbone=load_backbone(model_name="scratch", n_feats=n_feats)
+            self.backbone=load_backbone(model_name="scratch")
         else:
             self.backbone = backbone
         # get_backbone(model_name, n_feats)  # change to load_backbone
         # self.model = torch.nn.Sequential(self.model, NonAdaptiveConcatPool2d(8))
         self.cov_model = FeatureCNN2(ncov=ncov,n_out=n_out,add_layers=add_layers)
+        self.loss_func = torch.nn.BCEWithLogitsLoss()  # sigmoid loss, use this for optimization
 
     def forward(self,x,cov=None):
         # B x C x (n_slices x orig_W) x orig_W
